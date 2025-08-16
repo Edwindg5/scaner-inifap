@@ -1,15 +1,14 @@
-# api/main.py
-from flask import Flask, request, jsonify, send_file, send_from_directory
-from scaner import extract_data_from_pdf
+from flask import Flask, request, jsonify, send_file, render_template
+from api.scaner import extract_data_from_pdf
 from flask_cors import CORS
 import pandas as pd
 import io
 import os
+import json
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
-
-# Mapeo de columnas para el Excel
+# Mapeo de columnas para el Excel (mantener tu lógica exacta)
 COLUMN_MAPPING = {
     'nombre_productor': 'NOMBRE DEL PRODUCTOR',
     'municipio': 'MUNICIPIO',
@@ -45,9 +44,13 @@ COLUMN_MAPPING = {
     'rel_k_mg': 'K/MG'
 }
 
-@app.route('/', methods=['GET'])
-@app.route('/api', methods=['GET'])
+@app.route('/')
 def index():
+    """Servir la página principal"""
+    return render_template('index.html')
+
+@app.route('/api', methods=['GET'])
+def api_info():
     return jsonify({"message": "API de análisis de suelos funcionando correctamente"})
 
 @app.route('/api/procesar-pdf', methods=['POST'])
@@ -134,11 +137,9 @@ def descargar_excel():
         )
     except Exception as e:
         return jsonify({"error": f"Error al generar Excel: {str(e)}"}), 500
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'static'),
-                           'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
-# Para desarrollo local
+# Para desarrollo local y producción
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_ENV') == 'development'
+    app.run(host='0.0.0.0', port=port, debug=debug)
