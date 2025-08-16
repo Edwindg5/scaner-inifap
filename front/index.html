@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Análisis de Suelos - INIFAP</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #1B5E20;
+            --secondary-color: #2E7D32;
+            --accent-color: #4CAF50;
+            --light-green: #E8F5E9;
+            --dark-green: #0D4412;
+            --warning-color: #FF9800;
+            --error-color: #F44336;
+            --text-dark: #1A1A1A;
+            --text-light: #666;
+            --bg-light: #F5F5F5;
+            --white: #FFFFFF;
+            --border-color: #E0E0E0;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--light-green) 0%, #F1F8E9 100%);
+            min-height: 100vh;
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: var(--white);
+            padding: 2rem 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" patternUnits="userSpaceOnUse" width="100" height="100"><path d="M20 20 Q30 10 40 20 T60 20 T80 20" stroke="rgba(255,255,255,0.1)" fill="none" stroke-width="2"/><path d="M10 40 Q20 30 30 40 T50 40 T70 40 T90 40" stroke="rgba(255,255,255,0.1)" fill="none" stroke-width="2"/><circle cx="15" cy="60" r="3" fill="rgba(255,255,255,0.1)"/><circle cx="45" cy="65" r="2" fill="rgba(255,255,255,0.1)"/><circle cx="75" cy="62" r="2.5" fill="rgba(255,255,255,0.1)"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>') repeat;
+            opacity: 0.3;
+        }
+
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+            text-align: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            background: var(--white);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-color);
+            font-size: 2rem;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .title-section h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+            font-weight: 300;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+
+        .upload-section {
+            background: var(--white);
+            border-radius: 15px;
+            padding: 2.5rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+            border: 2px solid transparent;
+            background-clip: padding-box;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--accent-color), var(--secondary-color));
+        }
+
+        .form-title {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            color: var(--primary-color);
+        }
+
+        .form-title i {
+            font-size: 1.5rem;
+        }
+
+        .form-title h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .file-upload-container {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        #pdfFile {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-display {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.5rem;
+            border: 2px dashed var(--border-color);
+            border-radius: 10px;
+            background: var(--bg-light);
+            transition: all 0.3s ease;
+            min-height: 120px;
+            cursor: pointer;
+        }
+
+        .file-input-display:hover {
+            border-color: var(--accent-color);
+            background: var(--light-green);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+        }
+
+        .file-icon {
+            font-size: 3rem;
+            color: var(--accent-color);
+            transition: transform 0.3s ease;
+        }
+
+        .file-input-display:hover .file-icon {
+            transform: scale(1.1);
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-info h3 {
+            color: var(--primary-color);
+            font-size: 1.2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .file-info p {
+            color: var(--text-light);
+            font-size: 0.9rem;
+        }
+
+        button[type="submit"] {
+            background: linear-gradient(135deg, var(--accent-color) 0%, var(--secondary-color) 100%);
+            color: var(--white);
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        button[type="submit"]:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(76, 175, 80, 0.3);
+        }
+
+        button[type="submit"]:active {
+            transform: translateY(0);
+        }
+
+        .result-box {
+            background: var(--white);
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            margin-top: 2rem;
+            border-left: 5px solid var(--accent-color);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .result-item {
+            background: var(--bg-light);
+            border-radius: 10px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .result-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        }
+
+        .result-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-color), var(--secondary-color));
+            border-radius: 10px 10px 0 0;
+        }
+
+        .result-item h4 {
+            color: var(--primary-color);
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .producer-info {
+            background: linear-gradient(135deg, var(--light-green) 0%, var(--white) 100%);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .parametros-fisicos, 
+        .parametros-fertilidad, 
+        .parametros-quimicos, 
+        .parametros-micro, 
+        .parametros-relaciones {
+            margin-top: 1.5rem;
+            background: var(--white);
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color);
+        }
+
+        .parametros-fisicos h5, 
+        .parametros-fertilidad h5, 
+        .parametros-quimicos h5, 
+        .parametros-micro h5, 
+        .parametros-relaciones h5 {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1rem;
+            color: var(--primary-color);
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-top: 10px;
+        }
+
+        th {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: var(--white);
+            font-weight: 600;
+            padding: 1rem;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+
+        td {
+            padding: 0.8rem 1rem;
+            border: 1px solid var(--border-color);
+            transition: background-color 0.2s ease;
+        }
+
+        tr:nth-child(even) {
+            background: var(--bg-light);
+        }
+
+        tr:hover {
+            background: var(--light-green);
+        }
+
+        .parametros-fertilidad table {
+            background-color: var(--light-green);
+        }
+
+        #errorContainer {
+            background: linear-gradient(135deg, #FFEBEE 0%, #FCE4EC 100%);
+            border: 1px solid var(--error-color);
+            border-radius: 10px;
+            padding: 1.5rem;
+            color: var(--error-color);
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, var(--accent-color) 0%, var(--secondary-color) 100%);
+            color: var(--white);
+            border: none;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            text-decoration: none;
+            margin-top: 20px;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(76, 175, 80, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0 1rem;
+            }
+
+            .header-content {
+                padding: 0 1rem;
+            }
+
+            .title-section h1 {
+                font-size: 2rem;
+            }
+
+            .logo-section {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            table {
+                font-size: 0.8rem;
+            }
+
+            th, td {
+                padding: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-section">
+                <div class="logo">
+                    <i class="fas fa-seedling"></i>
+                </div>
+                <div class="title-section">
+                    <h1>Sistema de Análisis de Suelos</h1>
+                    <p class="subtitle">Instituto Nacional de Investigaciones Forestales, Agrícolas y Pecuarias</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="upload-section">
+            <div class="form-title">
+                <i class="fas fa-file-pdf"></i>
+                <h2>Extractor de Datos de PDF Agrícola</h2>
+            </div>
+            
+            <form id="pdfForm">
+                <div class="file-upload-container">
+                    <div class="file-input-display" onclick="document.getElementById('pdfFile').click()">
+                        <i class="fas fa-cloud-upload-alt file-icon"></i>
+                        <div class="file-info">
+                            <h3>Seleccionar archivo PDF</h3>
+                            <p>Haz clic aquí para seleccionar tu archivo de análisis de suelo</p>
+                            <p style="margin-top: 0.5rem; font-size: 0.8rem;">
+                                <i class="fas fa-info-circle"></i> Formato: PDF | Tamaño máximo: 10MB
+                            </p>
+                        </div>
+                    </div>
+                    <input type="file" id="pdfFile" accept=".pdf" required>
+                    <button type="submit">
+                        <i class="fas fa-microscope"></i>
+                        Procesar PDF
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <div id="resultContainer" class="result-box hidden">
+            <h3><i class="fas fa-chart-line"></i> Resultados del Análisis:</h3>
+            <div id="resultsList"></div>
+        </div>
+        
+        <div id="errorContainer" class="result-box hidden">
+            <i class="fas fa-exclamation-triangle"></i>
+            <p id="errorText"></p>
+        </div>
+    </div>
+
+    <script src="index.js"></script>
+</body>
+</html>
