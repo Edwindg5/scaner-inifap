@@ -27,7 +27,8 @@ document.getElementById('pdfForm').addEventListener('submit', async (e) => {
     formData.append('pdf', fileInput.files[0]);
 
     try {
-        const response = await fetch('/procesar-pdf', {
+        // Cambiar la ruta para usar /api/procesar-pdf
+        const response = await fetch('/api/procesar-pdf', {
             method: 'POST',
             body: formData
         });
@@ -407,7 +408,8 @@ async function downloadExcel() {
         downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando Excel...';
         downloadBtn.style.pointerEvents = 'none';
 
-        const response = await fetch('/descargar-excel', {
+        // Cambiar la ruta para usar /api/descargar-excel
+        const response = await fetch('/api/descargar-excel', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
