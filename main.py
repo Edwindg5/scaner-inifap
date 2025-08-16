@@ -6,6 +6,16 @@ import io
 import os
 import json
 
+# Verificar versiones de dependencias críticas
+import sys
+required_python = (3, 9)
+if sys.version_info < required_python:
+    raise RuntimeError(f"Python {required_python[0]}.{required_python[1]} or later is required")
+
+# Configuración de pandas para reducir uso de memoria
+pd.set_option('mode.use_inf_as_na', True)
+pd.set_option('display.max_columns', None)
+
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
 
