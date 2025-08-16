@@ -3,32 +3,30 @@
   "builds": [
     {
       "src": "api/main.py",
-      "use": "@vercel/python",
-      "config": { "runtime": "python3.9" }
-    },
-    {
-      "src": "front/**/*",
-      "use": "@vercel/static"
+      "use": "@vercel/python"
     }
   ],
   "routes": [
-    { 
-      "src": "/api/procesar-pdf", 
-      "dest": "api/main.py",
-      "methods": ["POST"]
+    {
+      "src": "/api/procesar-pdf",
+      "dest": "/api/main.py"
     },
-    { 
+    {
       "src": "/api/descargar-excel", 
-      "dest": "api/main.py",
-      "methods": ["POST"]
+      "dest": "/api/main.py"
     },
-    { 
-      "src": "/api/(.*)", 
-      "dest": "api/main.py" 
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/main.py"
     },
-    { 
-      "src": "/(.*)", 
-      "dest": "front/$1" 
+    {
+      "src": "/(.*)",
+      "dest": "/front/$1"
     }
-  ]
+  ],
+  "functions": {
+    "api/main.py": {
+      "maxDuration": 30
+    }
+  }
 }
