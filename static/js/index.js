@@ -1,4 +1,6 @@
+//pythonapi-escaner/static/js/index.js
 // Variables globales para el manejo de datos
+
 let currentData = null;
 
 // Event listener principal para el formulario
@@ -33,15 +35,32 @@ document.getElementById('pdfForm').addEventListener('submit', async (e) => {
             body: formData
         });
 
-        const data = await response.json();
+        const responseData = await response.json();
         
-        if (!response.ok || (data[0] && data[0].error)) {
-            showError(data[0]?.error || "Error desconocido al procesar el PDF");
+        // CORRECCIÓN: Manejar la estructura correcta de la respuesta
+        if (!response.ok) {
+            showError(responseData.message || "Error desconocido al procesar el PDF");
             return;
         }
 
-        if (data.length === 0) {
+        // Verificar si hay error en el status
+        if (responseData.status === "error") {
+            showError(responseData.message || "Error al procesar el PDF");
+            return;
+        }
+
+        // Extraer los datos del objeto respuesta
+        const data = responseData.data;
+        
+        // Verificar si data es un array y no está vacío
+        if (!Array.isArray(data) || data.length === 0) {
             showError("No se encontraron datos válidos en el archivo PDF");
+            return;
+        }
+
+        // Verificar si el primer elemento contiene error
+        if (data[0] && data[0].error) {
+            showError(data[0].error);
             return;
         }
 
@@ -418,7 +437,8 @@ async function downloadExcel() {
         });
 
         if (!response.ok) {
-            throw new Error('Error al generar el archivo Excel');
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Error al generar el archivo Excel');
         }
 
         const blob = await response.blob();
