@@ -1,8 +1,11 @@
 flask==2.2.5
 flask-cors==4.0.0
 pandas==1.5.3
-numpy==1.24.4  # Versión compatible con Python 3.9
+numpy==1.24.4
 xlsxwriter==3.1.9
 python-dateutil==2.8.2
 pytz==2023.3
 pdfplumber==0.9.0
+Pillow==9.5.0
+pycryptodome==3.19.0
+Werkzeug==2.2.3
