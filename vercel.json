@@ -4,13 +4,14 @@
     {
       "src": "main.py",
       "use": "@vercel/python",
-      "config": { 
+      "config": {
+        "runtime": "python3.9",
         "maxLambdaSize": "15mb",
-        "runtime": "python3.9"
+        "includeFiles": ["templates/**", "static/**", "api/**"]
       }
     },
     {
-      "src": "static/*",
+      "src": "static/**",
       "use": "@vercel/static"
     }
   ],
