@@ -7,12 +7,6 @@ import io
 import os
 import json
 
-# Verificar versiones de dependencias críticas
-import sys
-required_python = (3, 9)
-if sys.version_info < required_python:
-    raise RuntimeError(f"Python {required_python[0]}.{required_python[1]} or later is required")
-
 app = Flask(__name__, template_folder='templates', static_folder='static')
 CORS(app)
 
@@ -20,23 +14,18 @@ CORS(app)
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max upload
 
+
 @app.route('/')
 def index():
-    """Servir la página principal"""
     return render_template('index.html')
 
 @app.route('/static/<path:path>')
 def serve_static(path):
-    """Servir archivos estáticos"""
     return send_from_directory('static', path)
 
 @app.route('/api')
 def api_info():
-    return jsonify({
-        "message": "API de análisis de suelos funcionando correctamente",
-        "status": "active",
-        "version": "1.0.0"
-    })
+    return jsonify({"message": "API funcionando", "status": "active"})
 
 @app.route('/api/procesar-pdf', methods=['POST'])
 def procesar_pdf():
@@ -208,8 +197,7 @@ def handler(request):
         response = app.full_dispatch_request()
         return response
 
-# Para desarrollo local
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('FLASK_ENV') == 'development'
-    app.run(host='0.0.0.0', port=port, debug=debug)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)

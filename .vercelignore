@@ -10,7 +10,7 @@ pip-log.txt
 pip-delete-this-directory.txt
 .git/
 .gitignore
-README.md
+README.md   
 *.md
 .DS_Store
 Thumbs.db

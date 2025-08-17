@@ -3,28 +3,10 @@
   "builds": [
     {
       "src": "main.py",
-      "use": "@vercel/python",
-      "config": {
-        "runtime": "python3.9",
-        "maxLambdaSize": "50mb",
-        "maxDuration": 60,
-        "includeFiles": [
-          "templates/**",
-          "static/**", 
-          "api/**",
-          "*.py"
-        ]
-      }
+      "use": "@vercel/python"
     }
   ],
   "routes": [
-    {
-      "src": "/static/(.*)",
-      "dest": "/static/$1",
-      "headers": {
-        "cache-control": "public, max-age=31536000, immutable"
-      }
-    },
     {
       "src": "/(.*)",
       "dest": "/main.py"
