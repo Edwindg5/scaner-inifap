@@ -1,0 +1,11 @@
+flask>=2.3.0,<3.0.0
+flask-cors>=4.0.0,<5.0.0
+pandas>=2.0.0,<2.1.0
+numpy>=1.24.0,<1.26.0
+xlsxwriter>=3.0.0,<4.0.0
+python-dateutil>=2.8.0,<3.0.0
+pytz>=2023.0,<2024.0
+pdfplumber>=0.10.0,<0.11.0
+Pillow>=10.0.0,<11.0.0
+pycryptodome>=3.19.0,<4.0.0
+Werkzeug>=2.3.0,<3.0.0
