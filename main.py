@@ -193,7 +193,7 @@ def handler(request):
         from werkzeug.wrappers import Request
         flask_request = Request(request.environ if hasattr(request, 'environ') else {})
         
-        # Procesar la request con Flask
+        # Procesar la request con Flaskss
         response = app.full_dispatch_request()
         return response
 
