@@ -182,20 +182,7 @@ def descargar_excel():
             "code": 500
         }), 500
 
-# IMPORTANTE: Función requerida para Vercel
-def handler(request):
-    """
-    Punto de entrada principal para Vercel.
-    Esta función debe existir y ser llamada 'handler'
-    """
-    with app.app_context():
-        # Crear un contexto de request Flask compatible
-        from werkzeug.wrappers import Request
-        flask_request = Request(request.environ if hasattr(request, 'environ') else {})
-        
-        # Procesar la request con Flaskss
-        response = app.full_dispatch_request()
-        return response
+
 
 
 if __name__ == "__main__":
