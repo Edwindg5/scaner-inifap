@@ -7,7 +7,7 @@
       "config": {
         "runtime": "python3.9",
         "maxLambdaSize": "50mb",
-        "maxDuration": 30,
+        "maxDuration": 60,
         "includeFiles": [
           "templates/**",
           "static/**", 
