@@ -3,6 +3,7 @@
 
 let currentData = null;
 
+
 // Event listener principal para el formulario
 document.getElementById('pdfForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -11,6 +12,9 @@ document.getElementById('pdfForm').addEventListener('submit', async (e) => {
     document.getElementById('resultContainer').classList.add('hidden');
     document.getElementById('errorContainer').classList.add('hidden');
     document.getElementById('resultsList').innerHTML = '';
+    
+    // Ocultar botón de descarga superior si existe
+    hideTopDownloadButton();
     
     const fileInput = document.getElementById('pdfFile');
     const submitBtn = document.querySelector('button[type="submit"]');
@@ -67,6 +71,9 @@ document.getElementById('pdfForm').addEventListener('submit', async (e) => {
         // Guardar datos globalmente para descarga
         currentData = data;
         
+        // Mostrar botón de descarga en la parte superior PRIMERO
+        showTopDownloadButton();
+        
         // Mostrar resultados con efectos visuales
         displayResults(data);
         
@@ -83,7 +90,59 @@ document.getElementById('pdfForm').addEventListener('submit', async (e) => {
     }
 });
 
+// Función para mostrar el botón de descarga en la parte superior
+function showTopDownloadButton() {
+    // Verificar si ya existe el contenedor
+    let topDownloadContainer = document.getElementById('topDownloadContainer');
+    
+    if (!topDownloadContainer) {
+        // Crear el contenedor del botón superior
+        topDownloadContainer = document.createElement('div');
+        topDownloadContainer.id = 'topDownloadContainer';
+        topDownloadContainer.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            padding: 1rem;
+            border: 2px solid var(--accent-color);
+            animation: slideInFromTop 0.5s ease-out;
+        `;
+        
+        // Crear el botón
+        const topDownloadBtn = document.createElement('button');
+        topDownloadBtn.className = 'top-download-btn';
+        topDownloadBtn.innerHTML = `
+            <i class="fas fa-file-excel"></i>
+            Descargar Excel
+        `;
+        topDownloadBtn.addEventListener('click', downloadExcel);
+        
+        topDownloadContainer.appendChild(topDownloadBtn);
+        document.body.appendChild(topDownloadContainer);
+    } else {
+        // Si ya existe, solo mostrarlo
+        topDownloadContainer.style.display = 'block';
+        topDownloadContainer.style.animation = 'slideInFromTop 0.5s ease-out';
+    }
+}
+
+// Función para ocultar el botón de descarga superior
+function hideTopDownloadButton() {
+    const topDownloadContainer = document.getElementById('topDownloadContainer');
+    if (topDownloadContainer) {
+        topDownloadContainer.style.animation = 'slideOutToTop 0.3s ease-in forwards';
+        setTimeout(() => {
+            topDownloadContainer.style.display = 'none';
+        }, 300);
+    }
+}
+
 // Función para mostrar los resultados con diseño mejorado
+// Función optimizada para mostrar resultados de PDFs grandes
 function displayResults(data) {
     const resultsList = document.getElementById('resultsList');
     
@@ -93,246 +152,104 @@ function displayResults(data) {
     // Crear estadísticas generales
     const statsSection = createStatsSection(data);
     resultsList.appendChild(statsSection);
-
-    // Procesar cada resultado individualmente
-    data.forEach((result, index) => {
-        const resultItem = document.createElement('div');
-        resultItem.className = 'result-item';
-        
-        let html = `
-            <h4><i class="fas fa-seedling"></i> Registro ${index + 1}:</h4>
-            
-            <div class="producer-info">
-                <p><strong><i class="fas fa-user"></i> Productor:</strong> ${result.nombre_productor || 'No especificado'}</p>
-                <p><strong><i class="fas fa-leaf"></i> Cultivo:</strong> ${result.cultivo_establecer || 'No especificado'}</p>
-                <p><strong><i class="fas fa-chart-bar"></i> Rendimiento:</strong> ${result.meta_rendimiento || 'N/A'} t/ha</p>
-                <p><strong><i class="fas fa-map-marker-alt"></i> Municipio:</strong> ${result.municipio || 'No especificado'}</p>
-                <p><strong><i class="fas fa-location-dot"></i> Localidad:</strong> ${result.localidad || 'No especificado'}</p>
-            </div>
-            
-            <div class="parametros-fisicos">
-                <h5><i class="fas fa-layer-group"></i> Parámetros Físicos del Suelo:</h5>
-                <table>
-                    <thead>
-                        <tr>
-                            <th><i class="fas fa-flask"></i> Parámetro</th>
-                            <th><i class="fas fa-calculator"></i> Valor</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td>Limo (%)</td><td>${result.limo || 'N/A'}</td></tr>
-                        <tr><td>Arena (%)</td><td>${result.arena || 'N/A'}</td></tr>
-                        <tr><td>Arcilla (%)</td><td>${result.arcilla || 'N/A'}</td></tr>
-                        <tr><td>Textura</td><td>${result.textura || 'N/A'}</td></tr>
-                        <tr><td>Porcentaje de saturación (PS)</td><td>${result.porcentaje_saturacion || 'N/A'}</td></tr>
-                        <tr><td>Capacidad de campo (cc)</td><td>${result.capacidad_campo || 'N/A'}</td></tr>
-                        <tr><td>Punto de marchitez permanente (pmp)</td><td>${result.punto_marchitez || 'N/A'}</td></tr>
-                        <tr><td>Conductividad hidráulica</td><td>${result.conductividad_hidraulica || 'N/A'}</td></tr>
-                        <tr><td>Densidad aparente (Dap)</td><td>${result.densidad_aparente || 'N/A'}</td></tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="parametros-fertilidad">
-                <h5><i class="fas fa-seedling"></i> Fertilidad del Suelo:</h5>
-                <table>
-                    <thead>
-                        <tr>
-                            <th><i class="fas fa-atom"></i> Parámetro</th>
-                            <th><i class="fas fa-tachometer-alt"></i> Valor</th>
-                            <th><i class="fas fa-clipboard-check"></i> Interpretación</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>M.O.</td>
-                            <td>${result.mo || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_mo)}">${result.interp_mo || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Fósforo (P)</td>
-                            <td>${result.fosforo || 'N/A'} mg/kg</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_fosforo)}">${result.interp_fosforo || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Nitrógeno Inorgánico</td>
-                            <td>${result.nitrogeno || 'N/A'} mg/kg</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_nitrogeno)}">${result.interp_nitrogeno || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Potasio (K)</td>
-                            <td>${result.potasio || 'N/A'} mg/kg</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_potasio)}">${result.interp_potasio || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Calcio (Ca)</td>
-                            <td>${result.calcio || 'N/A'} mg/kg</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_calcio)}">${result.interp_calcio || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Magnesio (Mg)</td>
-                            <td>${result.magnesio || 'N/A'} mg/kg</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_magnesio)}">${result.interp_magnesio || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Sodio (Na)</td>
-                            <td>${result.sodio || 'N/A'} mg/kg</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_sodio)}">${result.interp_sodio || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Azufre (S-SO₄)</td>
-                            <td>${result.azufre || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_azufre)}">${result.interp_azufre || 'N/A'}</span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="parametros-quimicos">
-                <h5><i class="fas fa-vial"></i> Parámetros Químicos del Suelo:</h5>
-                <table>
-                    <thead>
-                        <tr>
-                            <th><i class="fas fa-flask"></i> Parámetro</th>
-                            <th><i class="fas fa-tachometer-alt"></i> Valor</th>
-                            <th><i class="fas fa-clipboard-check"></i> Interpretación</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>pH (Relación 2:1 agua suelo)</td>
-                            <td>${result.ph_agua || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_ph_agua)}">${result.interp_ph_agua || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>pH (CaCl₂ 0.01 M)</td>
-                            <td>${result.ph_cacl2 || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_ph_cacl2)}">${result.interp_ph_cacl2 || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>pH (KCl 1 M)</td>
-                            <td>${result.ph_kcl || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_ph_kcl)}">${result.interp_ph_kcl || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Carbonato de calcio equivalente (%)</td>
-                            <td>${result.carbonato_calcio || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_carbonato_calcio)}">${result.interp_carbonato_calcio || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Conductividad eléctrica (dS/m)</td>
-                            <td>${result.conductividad_electrica || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_conductividad_electrica)}">${result.interp_conductividad_electrica || 'N/A'}</span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="parametros-micro">
-                <h5><i class="fas fa-microscope"></i> Micronutrientes:</h5>
-                <table>
-                    <thead>
-                        <tr>
-                            <th><i class="fas fa-atom"></i> Parámetro</th>
-                            <th><i class="fas fa-balance-scale"></i> Unidad</th>
-                            <th><i class="fas fa-calculator"></i> Resultado</th>
-                            <th><i class="fas fa-clipboard-check"></i> Interpretación</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Hierro (Fe)</td>
-                            <td>${result.unidad_hierro || 'N/A'}</td>
-                            <td>${result.hierro || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_hierro)}">${result.interp_hierro || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Cobre (Cu)</td>
-                            <td>${result.unidad_cobre || 'N/A'}</td>
-                            <td>${result.cobre || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_cobre)}">${result.interp_cobre || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Zinc (Zn)</td>
-                            <td>${result.unidad_zinc || 'N/A'}</td>
-                            <td>${result.zinc || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_zinc)}">${result.interp_zinc || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Manganeso (Mn)</td>
-                            <td>${result.unidad_manganeso || 'N/A'}</td>
-                            <td>${result.manganeso || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_manganeso)}">${result.interp_manganeso || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Boro (B)</td>
-                            <td>${result.unidad_boro || 'N/A'}</td>
-                            <td>${result.boro || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_boro)}">${result.interp_boro || 'N/A'}</span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="parametros-relaciones">
-                <h5><i class="fas fa-exchange-alt"></i> Relaciones entre Cationes:</h5>
-                <table>
-                    <thead>
-                        <tr>
-                            <th><i class="fas fa-sitemap"></i> Relación</th>
-                            <th><i class="fas fa-calculator"></i> Valor</th>
-                            <th><i class="fas fa-clipboard-check"></i> Interpretación</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>Ca/Mg</td>
-                            <td>${result.rel_ca_mg || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_rel_ca_mg)}">${result.interp_rel_ca_mg || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Mg/K</td>
-                            <td>${result.rel_mg_k || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_rel_mg_k)}">${result.interp_rel_mg_k || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>Ca/K</td>
-                            <td>${result.rel_ca_k || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_rel_ca_k)}">${result.interp_rel_ca_k || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>(Ca+Mg)/K</td>
-                            <td>${result.rel_ca_mg_k || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_rel_ca_mg_k)}">${result.interp_rel_ca_mg_k || 'N/A'}</span></td>
-                        </tr>
-                        <tr>
-                            <td>K/Mg</td>
-                            <td>${result.rel_k_mg || 'N/A'}</td>
-                            <td><span class="interpretation-badge ${getInterpretationClass(result.interp_rel_k_mg)}">${result.interp_rel_k_mg || 'N/A'}</span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        `;
-        
-        resultItem.innerHTML = html;
-        resultsList.appendChild(resultItem);
-    });
-
-    // Agregar botón de descarga Excel mejorado
-    const downloadBtn = createDownloadButton();
-    resultsList.appendChild(downloadBtn);
     
-    // Mostrar el contenedor de resultados con animación
+    // Para PDFs muy grandes, mostrar en lotes para no sobrecargar el DOM
+    const BATCH_SIZE = 20; // Mostrar 20 registros por lote
+    let currentBatch = 0;
+    
+    function renderBatch() {
+        const start = currentBatch * BATCH_SIZE;
+        const end = Math.min(start + BATCH_SIZE, data.length);
+        
+        for (let i = start; i < end; i++) {
+            const result = data[i];
+            const resultItem = createResultItem(result, i + 1);
+            resultsList.appendChild(resultItem);
+        }
+        
+        currentBatch++;
+        
+        // Si hay más datos, crear botón para cargar más
+        if (end < data.length) {
+            const loadMoreBtn = document.createElement('button');
+            loadMoreBtn.textContent = `Cargar más registros (${end}/${data.length})`;
+            loadMoreBtn.className = 'load-more-btn';
+            loadMoreBtn.style.cssText = `
+                width: 100%;
+                padding: 1rem;
+                margin: 1rem 0;
+                background: var(--accent-color);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                font-size: 1rem;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            `;
+            
+            loadMoreBtn.addEventListener('click', () => {
+                loadMoreBtn.remove();
+                renderBatch();
+            });
+            
+            resultsList.appendChild(loadMoreBtn);
+        }
+    }
+    
+    // Renderizar primer lote
+    renderBatch();
+    
+    // Mostrar el contenedor con animación
     document.getElementById('resultContainer').classList.remove('hidden');
     
-    // Scroll suave hacia los resultados
+    // Scroll suave
     setTimeout(() => {
         document.getElementById('resultContainer').scrollIntoView({ 
             behavior: 'smooth',
             block: 'start'
         });
     }, 300);
+}
+
+// Función auxiliar para crear un item de resultado
+function createResultItem(result, index) {
+    const resultItem = document.createElement('div');
+    resultItem.className = 'result-item';
+    
+    // HTML simplificado para mejor rendimiento
+    resultItem.innerHTML = `
+        <h4><i class="fas fa-seedling"></i> Registro ${index}:</h4>
+        
+        <div class="producer-info">
+            <p><strong><i class="fas fa-user"></i> Productor:</strong> ${result.nombre_productor || 'No especificado'}</p>
+            <p><strong><i class="fas fa-leaf"></i> Cultivo:</strong> ${result.cultivo_establecer || 'No especificado'}</p>
+            <p><strong><i class="fas fa-map-marker-alt"></i> Municipio:</strong> ${result.municipio || 'No especificado'}</p>
+        </div>
+        
+        <div class="parametros-principales">
+            <h5><i class="fas fa-vial"></i> Parámetros Principales:</h5>
+            <div class="params-grid">
+                <div class="param-item">
+                    <span class="param-label">pH:</span>
+                    <span class="param-value">${result.ph_agua || 'N/A'}</span>
+                </div>
+                <div class="param-item">
+                    <span class="param-label">M.O.:</span>
+                    <span class="param-value">${result.mo || 'N/A'}</span>
+                </div>
+                <div class="param-item">
+                    <span class="param-label">Fósforo:</span>
+                    <span class="param-value">${result.fosforo || 'N/A'} mg/kg</span>
+                </div>
+                <div class="param-item">
+                    <span class="param-label">Potasio:</span>
+                    <span class="param-value">${result.potasio || 'N/A'} mg/kg</span>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    return resultItem;
 }
 
 // Función para crear la sección de estadísticas
@@ -373,30 +290,6 @@ function createStatsSection(data) {
     return statsDiv;
 }
 
-// Función para crear el botón de descarga mejorado
-function createDownloadButton() {
-    const downloadContainer = document.createElement('div');
-    downloadContainer.style.cssText = `
-        display: flex;
-        justify-content: center;
-        gap: 1rem;
-        margin-top: 2rem;
-        padding-top: 2rem;
-        border-top: 2px solid var(--border-color);
-    `;
-    
-    const downloadBtn = document.createElement('button');
-    downloadBtn.className = 'download-btn';
-    downloadBtn.innerHTML = `
-        <i class="fas fa-file-excel"></i>
-        Descargar Análisis en Excel
-    `;
-    downloadBtn.addEventListener('click', downloadExcel);
-    
-    downloadContainer.appendChild(downloadBtn);
-    return downloadContainer;
-}
-
 // Función para determinar la clase CSS de interpretación
 function getInterpretationClass(interpretation) {
     if (!interpretation) return '';
@@ -419,13 +312,17 @@ async function downloadExcel() {
         return;
     }
 
-    const downloadBtn = document.querySelector('.download-btn');
-    const originalContent = downloadBtn.innerHTML;
+    // Obtener todos los botones de descarga (tanto el superior como cualquier otro)
+    const downloadBtns = document.querySelectorAll('.download-btn, .top-download-btn');
+    const originalContents = [];
     
     try {
-        // Mostrar estado de carga
-        downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando Excel...';
-        downloadBtn.style.pointerEvents = 'none';
+        // Mostrar estado de carga en todos los botones
+        downloadBtns.forEach((btn, index) => {
+            originalContents[index] = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generando...';
+            btn.style.pointerEvents = 'none';
+        });
 
         // Cambiar la ruta para usar /api/descargar-excel
         const response = await fetch('/api/descargar-excel', {
@@ -463,9 +360,11 @@ async function downloadExcel() {
         showError("Error al descargar el archivo: " + error.message);
         console.error("Error:", error);
     } finally {
-        // Restaurar botón
-        downloadBtn.innerHTML = originalContent;
-        downloadBtn.style.pointerEvents = 'auto';
+        // Restaurar todos los botones
+        downloadBtns.forEach((btn, index) => {
+            btn.innerHTML = originalContents[index] || '<i class="fas fa-file-excel"></i> Descargar Excel';
+            btn.style.pointerEvents = 'auto';
+        });
     }
 }
 
@@ -496,18 +395,18 @@ function showSuccess(message) {
     successDiv.style.cssText = `
         position: fixed;
         top: 20px;
-        right: 20px;
+        left: 20px;
         background: linear-gradient(135deg, var(--accent-color), #45a049);
         color: white;
         padding: 1rem 1.5rem;
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
-        z-index: 1000;
+        z-index: 999;
         display: flex;
         align-items: center;
         gap: 0.5rem;
         font-weight: 500;
-        animation: slideInRight 0.3s ease-out;
+        animation: slideInLeft 0.3s ease-out;
         max-width: 300px;
     `;
     
@@ -520,7 +419,7 @@ function showSuccess(message) {
     
     // Auto-remover después de 4 segundos
     setTimeout(() => {
-        successDiv.style.animation = 'slideOutRight 0.3s ease-in forwards';
+        successDiv.style.animation = 'slideOutLeft 0.3s ease-in forwards';
         setTimeout(() => {
             if (document.body.contains(successDiv)) {
                 document.body.removeChild(successDiv);
@@ -595,8 +494,8 @@ function updateFileDisplay(file) {
         return;
     }
     
-    if (file.size > 10 * 1024 * 1024) { // 10MB limit
-        showError('El archivo es demasiado grande. Máximo 10MB permitido.');
+    if (file.size > 1024 * 1024 * 1024) { // 1GB límite
+        showError('El archivo es demasiado grande. Máximo 1GB permitido.');
         return;
     }
     
@@ -609,7 +508,7 @@ function updateFileDisplay(file) {
     `;
 }
 
-// Agregar estilos dinámicos para las interpretaciones
+// Agregar estilos dinámicos para las interpretaciones y animaciones
 function addInterpretationStyles() {
     const style = document.createElement('style');
     style.textContent = `
@@ -641,9 +540,55 @@ function addInterpretationStyles() {
             border: 1px solid #F44336;
         }
         
-        @keyframes slideInRight {
+        /* Estilos para el botón de descarga superior */
+        .top-download-btn {
+            background: linear-gradient(135deg, var(--accent-color) 0%, var(--secondary-color) 100%);
+            color: var(--white);
+            border: none;
+            padding: 0.8rem 1.5rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+        }
+
+        .top-download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+        }
+        
+        /* Animaciones */
+        @keyframes slideInFromTop {
             from {
-                transform: translateX(100%);
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOutToTop {
+            from {
+                transform: translateY(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+        }
+        
+        @keyframes slideInLeft {
+            from {
+                transform: translateX(-100%);
                 opacity: 0;
             }
             to {
@@ -652,13 +597,13 @@ function addInterpretationStyles() {
             }
         }
         
-        @keyframes slideOutRight {
+        @keyframes slideOutLeft {
             from {
                 transform: translateX(0);
                 opacity: 1;
             }
             to {
-                transform: translateX(100%);
+                transform: translateX(-100%);
                 opacity: 0;
             }
         }

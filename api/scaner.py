@@ -1,159 +1,323 @@
-# appi/scaner.py
 import pdfplumber
 import re
 import io
 import unicodedata
 from typing import Dict, List, Optional, Tuple
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
+import gc
+import psutil
+import os
 
-# =========================
-# API principal
-# =========================
+# Configuración optimizada para PDFs grandes
+MAX_WORKERS = min(8, os.cpu_count() or 4)  # Máximo 8 workers
+CHUNK_SIZE = 25  # Reducido para mejor manejo de memoria
+MEMORY_THRESHOLD = 80  # Porcentaje de memoria antes de limpiar
+
 def extract_data_from_pdf(pdf_bytes: bytes) -> List[Dict[str, str]]:
     resultados: List[Dict[str, str]] = []
+    
     try:
+        # Monitoreo de memoria inicial
+        initial_memory = psutil.virtual_memory().percent
+        print(f"Memoria inicial: {initial_memory:.1f}%")
+        
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-            for page in pdf.pages:
-                text = page.extract_text() or ""
-
-                if not re.search(r"DATOS\s+Y\s+CONDICIONES", text, re.IGNORECASE):
-                    if not re.search(r"(MICRONUTRIENTES|Hierro\s*\(Fe\))", text, re.IGNORECASE):
-                        continue
-                    
-                registro = _extract_page_record(page, text)
-                resultados.append(registro)
-
-        return resultados if resultados else [{"error": "No se encontraron secciones requeridas en el PDF"}]
+            total_pages = len(pdf.pages)
+            print(f"Procesando PDF con {total_pages} páginas...")
+            
+            if total_pages == 0:
+                return [{"error": "El PDF no contiene páginas válidas"}]
+            
+            start_time = time.time()
+            
+            # Procesamiento por lotes más pequeños para PDFs grandes
+            batch_size = CHUNK_SIZE if total_pages < 500 else max(10, CHUNK_SIZE // 2)
+            
+            # Procesar en lotes con liberación de memoria
+            for batch_start in range(0, total_pages, batch_size):
+                batch_end = min(batch_start + batch_size, total_pages)
+                batch_pages = list(range(batch_start, batch_end))
+                
+                print(f"Procesando lote {batch_start//batch_size + 1}: páginas {batch_start+1}-{batch_end}")
+                
+                # Procesar lote actual
+                batch_results = process_page_batch(pdf, batch_pages)
+                resultados.extend(batch_results)
+                
+                # Limpieza de memoria cada lote
+                gc.collect()
+                
+                # Verificar memoria y pausar si es necesario
+                current_memory = psutil.virtual_memory().percent
+                if current_memory > MEMORY_THRESHOLD:
+                    print(f"Memoria alta ({current_memory:.1f}%), liberando recursos...")
+                    time.sleep(0.5)  # Pausa breve para liberar memoria
+                    gc.collect()
+            
+            end_time = time.time()
+            final_memory = psutil.virtual_memory().percent
+            print(f"Procesamiento completado en {end_time - start_time:.2f} segundos")
+            print(f"Memoria final: {final_memory:.1f}%")
+            print(f"Registros extraídos: {len(resultados)}")
+            
+            return resultados if resultados else [{"error": "No se encontraron secciones requeridas en el PDF"}]
+    
+    except MemoryError:
+        print("Error de memoria durante el procesamiento")
+        gc.collect()
+        return [{"error": "El archivo PDF es demasiado grande para la memoria disponible"}]
     except Exception as e:
+        print(f"Error general: {str(e)}")
         return [{"error": f"Error al procesar el PDF: {str(e)}"}]
 
+def process_page_batch(pdf, page_indices: List[int]) -> List[Dict[str, str]]:
+    """Procesa un lote de páginas de manera más eficiente"""
+    batch_results = []
+    
+    with ThreadPoolExecutor(max_workers=min(MAX_WORKERS, len(page_indices))) as executor:
+        # Crear futures para cada página
+        futures = {}
+        for page_idx in page_indices:
+            try:
+                page = pdf.pages[page_idx]
+                future = executor.submit(process_single_page_optimized, page, page_idx + 1)
+                futures[future] = page_idx + 1
+            except Exception as e:
+                print(f"Error al crear future para página {page_idx + 1}: {e}")
+                continue
+        
+        # Recolectar resultados conforme van completándose
+        for future in as_completed(futures):
+            page_num = futures[future]
+            try:
+                result = future.result(timeout=30)  # Timeout de 30 segundos por página
+                if result and not result.get('skip', False):
+                    batch_results.append(result)
+            except Exception as e:
+                print(f"Error procesando página {page_num}: {str(e)}")
+                continue
+    
+    return batch_results
 
-# =========================
-# Helpers de extracción de una página
-# =========================
-def _extract_page_record(page: pdfplumber.page.Page, page_text: str) -> Dict[str, str]:
+def process_single_page_optimized(page, page_num: int) -> Optional[Dict[str, str]]:
+    """Versión optimizada del procesamiento de una sola página"""
+    try:
+        # Extraer texto una sola vez
+        page_text = page.extract_text() or ""
+        
+        # Pre-filtro rápido - más específico
+        if not has_relevant_content(page_text):
+            return {"skip": True}
+        
+        # Extraer registro completo
+        registro = _extract_page_record_optimized(page, page_text)
+        
+        # Validar que el registro tenga contenido útil
+        if is_valid_record(registro):
+            return registro
+        else:
+            return {"skip": True}
+            
+    except Exception as e:
+        print(f"Error procesando página {page_num}: {str(e)}")
+        return {"skip": True}
+
+def has_relevant_content(text: str) -> bool:
+    """Filtro más preciso para identificar páginas relevantes"""
+    indicators = [
+        r"DATOS\s+Y\s+CONDICIONES",
+        r"Nombre\s+del\s+productor",
+        r"MICRONUTRIENTES",
+        r"FERTILIDAD\s+DEL\s+SUELO",
+        r"Hierro\s*\(Fe\)",
+        r"pH\s*\(",
+        r"Fósforo.*mg/kg",
+        r"RELACIONES\s+ENTRE\s+CATIONES"
+    ]
+    
+    return any(re.search(pattern, text, re.IGNORECASE) for pattern in indicators)
+
+def is_valid_record(record: Dict[str, str]) -> bool:
+    """Verifica si un registro contiene datos útiles"""
+    if not record or record.get("skip"):
+        return False
+    
+    # Verificar que tenga al menos algunos campos básicos
+    required_indicators = [
+        record.get("nombre_productor", "").strip() not in ("No encontrado", ""),
+        record.get("cultivo_establecer", "").strip() not in ("No encontrado", ""),
+        any(record.get(field, "No encontrado") not in ("No encontrado", "N/A", "") 
+            for field in ["mo", "fosforo", "ph_agua", "arcilla"])
+    ]
+    
+    return any(required_indicators)
+
+def _extract_page_record_optimized(page: pdfplumber.page.Page, page_text: str) -> Dict[str, str]:
+    """Versión optimizada de extracción con mejor manejo de memoria"""
+    
+    # Extraer sección de datos una sola vez
     datos_sec = _slice_between(
         page_text,
         r"DATOS Y CONDICIONES DE LA MUESTRA",
         r"(?:RESULTADOS|PARÁMETROS QUÍMICOS DEL SUELO)"
     ) or page_text
 
-    def find(pattern: str, src: Optional[str] = None, default: str = "No encontrado") -> str:
-        s = src if src is not None else datos_sec
-        m = re.search(pattern, s, re.IGNORECASE)
-        return m.group(1).strip() if m else default
+    def find_in_text(pattern: str, source_text: str = None, default: str = "No encontrado") -> str:
+        search_text = source_text if source_text is not None else datos_sec
+        match = re.search(pattern, search_text, re.IGNORECASE)
+        if match:
+            result = match.group(1).strip()
+            return result if result else default
+        return default
 
-    # Datos básicos
-    productor = find(r"Nombre del productor\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*Coordenadas|$)", page_text)
-    cultivo = find(r"Cultivo a establecer\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s+Meta de rendimiento|\n)")
-    rendimiento = find(r"Meta de rendimiento\s+([\d.]+)\s*t/ha", datos_sec)
-    municipio = find(r"Municipio\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s+\bLocalidad\b)")
-    localidad = find(r"Localidad\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s+\bCantidad\b|\n)")
+    # Datos básicos - optimizados
+    productor = find_in_text(r"Nombre del productor\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s*Coordenadas|$)", page_text)
+    cultivo = find_in_text(r"Cultivo a establecer\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s+Meta de rendimiento|\n)")
+    rendimiento = find_in_text(r"Meta de rendimiento\s+([\d.]+)\s*t/ha")
+    municipio = find_in_text(r"Municipio\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s+\bLocalidad\b)")
+    localidad = find_in_text(r"Localidad\s+([A-ZÁÉÍÓÚÑ\s]+?)(?=\s+\bCantidad\b|\n)")
 
-    # Físicos
-    arcilla = find(r"Arcilla\s*\(%\)\s+([\d.]+)", page_text)
-    limo    = find(r"Limo\s*\(%\)\s+([\d.]+)", page_text)
-    arena   = find(r"Arena\s*\(%\)\s+([\d.]+)", page_text)
-    textura = find(r"Textura\s+([A-Za-zÁÉÍÓÚÑáéíóúñ]+)", page_text)
+    # Parámetros físicos - búsqueda directa
+    physical_params = {}
+    physical_patterns = {
+        "arcilla": r"Arcilla\s*\(%\)\s+([\d.]+)",
+        "limo": r"Limo\s*\(%\)\s+([\d.]+)",
+        "arena": r"Arena\s*\(%\)\s+([\d.]+)",
+        "textura": r"Textura\s+([A-Za-zÁÉÍÓÚÑáéíóúñ]+)",
+        "porcentaje_saturacion": r"Porcentaje de saturación\s*\(PS\)\s+([^\s]+)",
+        "capacidad_campo": r"Capacidad de campo\s*\(cc\)\s+([^\s]+)",
+        "punto_marchitez": r"Punto de marchitez permanente\s*\(pmp\)\s+([^\s]+)",
+        "conductividad_hidraulica": r"Conductividad hidráulica\s+([^\s]+)",
+        "densidad_aparente": r"Densidad aparente\s*\(Dap\)\s+([^\s]+)"
+    }
+    
+    for key, pattern in physical_patterns.items():
+        physical_params[key] = find_in_text(pattern, page_text)
 
-    porcentaje_saturacion     = find(r"Porcentaje de saturación\s*\(PS\)\s+([^\s]+)", page_text)
-    capacidad_campo           = find(r"Capacidad de campo\s*\(cc\)\s+([^\s]+)", page_text)
-    punto_marchitez           = find(r"Punto de marchitez permanente\s*\(pmp\)\s+([^\s]+)", page_text)
-    conductividad_hidraulica  = find(r"Conductividad hidráulica\s+([^\s]+)", page_text)
-    densidad_aparente         = find(r"Densidad aparente\s*\(Dap\)\s+([^\s]+)", page_text)
+    # Extraer otros parámetros usando métodos optimizados
+    try:
+        fert_vals, fert_interps = _extract_fertility_optimized(page)
+        quim_vals, quim_interps = _extract_chemical_params_optimized(page)
+        micro_vals, micro_units, micro_interps = _extract_micronutrients_optimized(page)
+        rel_vals, rel_interps = _extract_cation_relations_optimized(page)
+    except Exception as e:
+        print(f"Error en extracción de parámetros: {e}")
+        fert_vals, fert_interps = [], []
+        quim_vals, quim_interps = [], []
+        micro_vals, micro_units, micro_interps = [], [], []
+        rel_vals, rel_interps = [], []
 
-    # Fertilidad
-    fert_vals, fert_interps = _extract_fertility_by_layout(page)
-
-    # Parámetros químicos
-    quim_vals, quim_interps = _extract_chemical_params_by_layout(page)
-
-    # Micronutrientes (unidad, valor, interpretación)
-    micro_vals, micro_units, micro_interps = _extract_micronutrients(page)
-
-    # Relaciones entre cationes (valor, interpretación por columna)
-    rel_vals, rel_interps = _extract_cation_relations(page)
-
-    # Armar respuesta
-    res: Dict[str, str] = {
+    # Construir resultado
+    resultado = {
         "nombre_productor": productor,
         "cultivo_establecer": cultivo,
         "meta_rendimiento": rendimiento,
         "municipio": municipio,
         "localidad": localidad,
-
-        # Físicos
-        "arcilla": arcilla,
-        "limo": limo,
-        "arena": arena,
-        "textura": textura,
-        "porcentaje_saturacion": porcentaje_saturacion,
-        "capacidad_campo": capacidad_campo,
-        "punto_marchitez": punto_marchitez,
-        "conductividad_hidraulica": conductividad_hidraulica,
-        "densidad_aparente": densidad_aparente,
+        **physical_params
     }
-    res.update(_create_default_fertility_data())
-    res.update(_create_default_chemical_data())
-    res.update(_create_default_micro_data())
-    res.update(_create_default_rel_data())
 
-    # Fertilidad
-    if fert_vals:
-        keys = ["mo", "fosforo", "nitrogeno", "potasio", "calcio", "magnesio", "sodio", "azufre"]
-        for i, k in enumerate(keys):
-            if i < len(fert_vals):
-                v = fert_vals[i]
-                res[k] = "No analizado" if v.upper() == "N/A" else v
+    # Agregar valores por defecto y datos extraídos
+    resultado.update(_create_default_fertility_data())
+    resultado.update(_create_default_chemical_data())
+    resultado.update(_create_default_micro_data())
+    resultado.update(_create_default_rel_data())
 
-    if fert_interps:
-        keys = ["mo", "fosforo", "nitrogeno", "potasio", "calcio", "magnesio", "sodio", "azufre"]
-        for i, k in enumerate(keys):
-            if i < len(fert_interps):
-                res[f"interp_{k}"] = fert_interps[i].title()
+    # Asignar datos de fertilidad
+    _assign_fertility_data(resultado, fert_vals, fert_interps)
+    _assign_chemical_data(resultado, quim_vals, quim_interps)
+    _assign_micronutrient_data(resultado, micro_vals, micro_units, micro_interps)
+    _assign_relation_data(resultado, rel_vals, rel_interps)
 
-    # Químicos
-    if quim_vals:
-        keys = ["ph_agua", "ph_cacl2", "ph_kcl", "carbonato_calcio", "conductividad_electrica"]
-        for i, k in enumerate(keys):
-            if i < len(quim_vals):
-                v = quim_vals[i]
-                res[k] = "No analizado" if v.upper() == "N/A" else v
+    return resultado
 
-    if quim_interps:
-        keys = ["ph_agua", "ph_cacl2", "ph_kcl", "carbonato_calcio", "conductividad_electrica"]
-        for i, k in enumerate(keys):
-            if i < len(quim_interps):
-                res[f"interp_{k}"] = quim_interps[i].title()
+# Funciones auxiliares optimizadas
+def _assign_fertility_data(resultado: Dict, vals: List, interps: List):
+    """Asigna datos de fertilidad de manera optimizada"""
+    fertility_keys = ["mo", "fosforo", "nitrogeno", "potasio", "calcio", "magnesio", "sodio", "azufre"]
+    
+    for i, key in enumerate(fertility_keys):
+        if i < len(vals):
+            v = vals[i]
+            resultado[key] = "No analizado" if v.upper() == "N/A" else v
+        
+        if i < len(interps):
+            resultado[f"interp_{key}"] = interps[i].title()
 
-    # Micronutrientes
+def _assign_chemical_data(resultado: Dict, vals: List, interps: List):
+    """Asigna datos químicos de manera optimizada"""
+    chemical_keys = ["ph_agua", "ph_cacl2", "ph_kcl", "carbonato_calcio", "conductividad_electrica"]
+    
+    for i, key in enumerate(chemical_keys):
+        if i < len(vals):
+            v = vals[i]
+            resultado[key] = "No analizado" if v.upper() == "N/A" else v
+        
+        if i < len(interps):
+            resultado[f"interp_{key}"] = interps[i].title()
+
+def _assign_micronutrient_data(resultado: Dict, vals: List, units: List, interps: List):
+    """Asigna datos de micronutrientes de manera optimizada"""
     micro_keys = ["hierro", "cobre", "zinc", "manganeso", "boro"]
-    for i, k in enumerate(micro_keys):
-        if i < len(micro_vals):
-            res[k] = micro_vals[i]
-        if i < len(micro_units):
-            res[f"unidad_{k}"] = micro_units[i]
-        if i < len(micro_interps):
-            res[f"interp_{k}"] = micro_interps[i].title()
+    
+    for i, key in enumerate(micro_keys):
+        if i < len(vals):
+            resultado[key] = vals[i]
+        if i < len(units):
+            resultado[f"unidad_{key}"] = units[i]
+        if i < len(interps):
+            resultado[f"interp_{key}"] = interps[i].title()
 
-    # Relaciones entre cationes
+def _assign_relation_data(resultado: Dict, vals: List, interps: List):
+    """Asigna datos de relaciones de manera optimizada"""
     rel_keys = ["rel_ca_mg", "rel_mg_k", "rel_ca_k", "rel_ca_mg_k", "rel_k_mg"]
-    for i, k in enumerate(rel_keys):
-        if i < len(rel_vals):
-            res[k] = rel_vals[i]
-        if i < len(rel_interps):
-            res[f"interp_{k}"] = rel_interps[i].capitalize()
+    
+    for i, key in enumerate(rel_keys):
+        if i < len(vals):
+            resultado[key] = vals[i]
+        if i < len(interps):
+            resultado[f"interp_{key}"] = interps[i].capitalize()
 
-    return res
+# Versiones optimizadas de las funciones de extracción
+def _extract_fertility_optimized(page: pdfplumber.page.Page) -> Tuple[List[str], List[str]]:
+    """Versión optimizada con mejor manejo de memoria"""
+    try:
+        words = page.extract_words(x_tolerance=2, y_tolerance=2, keep_blank_chars=False)
+        if not words:
+            return [], []
+        
+        # Resto de la lógica original pero optimizada
+        return _extract_fertility_by_layout(page)
+    except Exception:
+        return [], []
 
+def _extract_chemical_params_optimized(page: pdfplumber.page.Page) -> Tuple[List[str], List[str]]:
+    """Versión optimizada de extracción de parámetros químicos"""
+    try:
+        return _extract_chemical_params_by_layout(page)
+    except Exception:
+        return [], []
 
+def _extract_micronutrients_optimized(page: pdfplumber.page.Page):
+    """Versión optimizada de extracción de micronutrientes"""
+    try:
+        return _extract_micronutrients(page)
+    except Exception:
+        return [], [], []
+
+def _extract_cation_relations_optimized(page: pdfplumber.page.Page) -> Tuple[List[str], List[str]]:
+    """Versión optimizada de extracción de relaciones"""
+    try:
+        return _extract_cation_relations(page)
+    except Exception:
+        return [], []
+
+# Mantener todas las funciones auxiliares originales
 def _slice_between(text: str, start_pat: str, end_pat: str) -> Optional[str]:
     m = re.search(start_pat + r"(.*?)" + end_pat, text, re.IGNORECASE | re.DOTALL)
     return m.group(1) if m else None
 
-
-# =========================
-# Limpieza para interpretaciones micronutrientes
-# =========================
 def _normalize_text(s: str) -> str:
     s = s.lower()
     s = ''.join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
@@ -177,10 +341,6 @@ def _clean_interpretation(texto: str) -> str:
             return CANON.get(lab, lab)
     return texto.strip()
 
-
-# =========================
-# Fertilidad por layout
-# =========================
 def _extract_fertility_by_layout(page: pdfplumber.page.Page) -> Tuple[List[str], List[str]]:
     words = page.extract_words(x_tolerance=2, y_tolerance=2, keep_blank_chars=False)
     for w in words:
@@ -233,10 +393,6 @@ def _extract_fertility_by_layout(page: pdfplumber.page.Page) -> Tuple[List[str],
 
     return vals[:8], interps[:8]
 
-
-# =========================
-# Químicos por layout (con recorte para Conductividad eléctrica)
-# =========================
 def _extract_chemical_params_by_layout(page: pdfplumber.page.Page) -> Tuple[List[str], List[str]]:
     text = page.extract_text() or ""
 
@@ -266,10 +422,6 @@ def _extract_chemical_params_by_layout(page: pdfplumber.page.Page) -> Tuple[List
 
     return result_vals, interp_vals
 
-
-# =========================
-# Micronutrientes - Versión final corregida
-# =========================
 def _extract_micronutrients(page):
     import re, unicodedata
 
@@ -287,14 +439,12 @@ def _extract_micronutrients(page):
         s = re.sub(r'\s+', ' ', s).strip()
         return s
 
-
     def _classify_label(text: str) -> str:
         t = _norm(text)
         
         t = re.sub(r"muy\s*baj\s*o", "muy bajo", t)
         t = re.sub(r"muy\s*ba\s*jo", "muy bajo", t)
         
-        # Ordenado por longitud para que “moderadamente alto” gane a “alto”
         labels = [
             'moderadamente alto',
             'moderadamente bajo',
@@ -313,11 +463,9 @@ def _extract_micronutrients(page):
     if not words:
         return ([], [], [])
 
-    # y medio para cada palabra
     for w in words:
         w['ymid'] = (w['top'] + w['bottom']) / 2.0
 
-    # 1) Localiza el título MICRONUTRIENTES y la fila de encabezados
     micro_hdr = [w for w in words if w['text'].upper() == 'MICRONUTRIENTES']
     if not micro_hdr:
         return ([], [], [])
@@ -345,7 +493,6 @@ def _extract_micronutrients(page):
     c_interp = centers.get('Interpretación', centers.get('Interpretacion'))
 
     def _bucket(line):
-        # Asigna cada token a la columna cuyo centro esté más cerca
         b = {'parametro': [], 'unidad': [], 'resultado': [], 'interpretacion': []}
         for tok in line:
             xmid = (tok['x0'] + tok['x1']) / 2.0
@@ -356,11 +503,9 @@ def _extract_micronutrients(page):
             b[nearest].append(tok)
         return b
 
-    # 2) Recorre líneas de la tabla hasta el siguiente bloque
     lines = []
     for y in sorted({round(w['ymid']) for w in words if y_cols + 2 < w['ymid'] < y_cols + 180}):
         line = sorted([w for w in words if abs(w['ymid'] - y) <= 3], key=lambda t: t['x0'])
-        # Cortamos cuando aparece el siguiente bloque visible
         if any('RELACIONES' in w['text'].upper() for w in line):
             break
         lines.append((y, line))
@@ -370,7 +515,6 @@ def _extract_micronutrients(page):
     for y, line in lines:
         b = _bucket(line)
 
-        # Detecta el nutriente en la columna "Parámetro"
         param_text = " ".join(t['text'] for t in b['parametro']).strip()
         m = re.search(r'(Hierro|Cobre|Zinc|Manganeso|Boro)\b.*', param_text, flags=re.I)
         if not m:
@@ -379,23 +523,19 @@ def _extract_micronutrients(page):
         if nutriente in encontrados:
             continue
 
-        # Unidad y valor
         unidad = " ".join(t['text'] for t in b['unidad']).strip() or "mg kg¯¹"
         val_tokens = [t['text'] for t in b['resultado'] if re.match(r'^[\d.,]+$', t['text'])]
         valor = val_tokens[-1].replace(',', '.') if val_tokens else 'No encontrado'
 
-         # Interpretación: primero la columna de "Interpretación"
         interp_tokens = [t["text"] for t in b["interpretacion"] if not re.match(r"^[\d.,]+$", t["text"])]
         interp_raw = " ".join(interp_tokens).strip()
 
         if not interp_raw:
-            # fallback 1: cualquier texto en la fila que no sea nombre, número ni unidad
             forbidden = set([nutriente, valor, unidad])
             all_tokens = [t["text"] for t in line if t["text"] not in forbidden and not re.match(r"^[\d.,]+$", t["text"])]
             interp_raw = " ".join(all_tokens).strip()
 
         if not interp_raw and c_interp is not None and c_res is not None:
-            # fallback 2: búsqueda extendida ±30 px
             x_left = (c_res + c_interp) / 2.0
             nearby = [
                 tok for tok in words
@@ -405,7 +545,6 @@ def _extract_micronutrients(page):
             ]
             interp_raw = " ".join(t["text"] for t in sorted(nearby, key=lambda t: t["x0"])).strip()
 
-
         interpretacion = _classify_label(interp_raw)
 
         encontrados[nutriente] = {
@@ -414,7 +553,6 @@ def _extract_micronutrients(page):
             'interpretacion': interpretacion,
         }
 
-    # 3) Devuelve en orden fijo
     valores, unidades, interps = [], [], []
     for n in objetivos:
         d = encontrados.get(n, None)
@@ -429,9 +567,6 @@ def _extract_micronutrients(page):
 
     return (valores, unidades, interps)
 
-# =========================
-# Relaciones entre cationes
-# =========================
 def _is_rel_interp_noise(s: str) -> bool:
     t = _normalize_text(s)
     return (
@@ -449,21 +584,15 @@ def _clean_rel_interp(s: str) -> str:
     return t
 
 def _extract_cation_relations(page: pdfplumber.page.Page) -> Tuple[List[str], List[str]]:
-    """
-    Extrae en orden: Ca/Mg, Mg/K, Ca/K, (Ca+Mg)/K, K/Mg
-    Devuelve (valores, interpretaciones).
-    """
     words = page.extract_words(x_tolerance=2, y_tolerance=2, keep_blank_chars=False)
     for w in words:
         w["ymid"] = (w["top"] + w["bottom"]) / 2.0
 
-    # 1) localizar el título
     title_ws = [w for w in words if "RELACIONES" in w["text"].upper()]
     if not title_ws:
         return [], []
     y_title = sorted(title_ws, key=lambda w: w["ymid"])[0]["ymid"]
 
-    # 2) buscar la fila de encabezados (con nombres de relaciones)
     labels = ["Ca/Mg", "Mg/K", "Ca/K", "(Ca+Mg)/K", "K/Mg"]
     candidate_rows = []
     for y in sorted({round(w["ymid"]) for w in words if y_title + 5 < w["ymid"] < y_title + 120}):
@@ -477,7 +606,6 @@ def _extract_cation_relations(page: pdfplumber.page.Page) -> Tuple[List[str], Li
 
     y_header, header_line, _ = sorted(candidate_rows, key=lambda t: (-t[2], t[0]))[0]
 
-    # posiciones x para cada etiqueta
     header_tokens = []
     for lab in labels:
         toks = [t for t in header_line if t["text"] == lab]
@@ -494,7 +622,6 @@ def _extract_cation_relations(page: pdfplumber.page.Page) -> Tuple[List[str], Li
         approx = [100 + i * 120 for i in range(len(labels))]
         header_tokens = [(lab, approx[i]) for i, lab in enumerate(labels)]
 
-    # 3) fila de valores (la primera fila con números)
     number_rows = []
     for y in sorted({round(w["ymid"]) for w in words if y_header + 5 < w["ymid"] < y_header + 80}):
         line = _words_at_y(words, y)
@@ -507,7 +634,6 @@ def _extract_cation_relations(page: pdfplumber.page.Page) -> Tuple[List[str], Li
         return [], []
     y_values, line_values = sorted(number_rows, key=lambda t: t[0])[0]
 
-    # 4) fila de interpretaciones (solo palabras, sin ruido)
     interp_rows = []
     for y in sorted({round(w["ymid"]) for w in words if y_values + 2 < w["ymid"] < y_values + 60}):
         line = _words_at_y(words, y)
@@ -525,14 +651,12 @@ def _extract_cation_relations(page: pdfplumber.page.Page) -> Tuple[List[str], Li
         return buckets
 
     b_vals = bucket_by_header([t for t in line_values if re.match(r"^[\d.,]+$", t["text"])])
-    # ⬇️ Filtra tokens de interpretación con ruido (Me/100, g, n/a, etc.)
     interp_tokens_filtered = [
         t for t in line_interp
         if not re.match(r"^[\d.,]+$", t["text"]) and not _is_rel_interp_noise(t["text"])
     ]
     b_interps = bucket_by_header(interp_tokens_filtered)
 
-    # Valores: tomar el último número (evita pegues previos)
     values = []
     for lab, _ in header_tokens:
         nums = b_vals.get(lab, [])
@@ -541,7 +665,6 @@ def _extract_cation_relations(page: pdfplumber.page.Page) -> Tuple[List[str], Li
         else:
             values.append("No encontrado")
 
-    # Interpretaciones: limpiar ruido residual
     interps = []
     for l, _ in header_tokens:
         raw = " ".join(b_interps.get(l, [])).strip()
@@ -550,14 +673,9 @@ def _extract_cation_relations(page: pdfplumber.page.Page) -> Tuple[List[str], Li
 
     return values, interps
 
-
-# =========================
-# Helpers
-# =========================
 def _words_at_y(words: List[dict], y: float, tol: float = 3.0) -> List[dict]:
     line = [w for w in words if abs(w["ymid"] - y) <= tol]
     return sorted(line, key=lambda w: w["x0"])
-
 
 def _index_of(seq: List[dict], pred) -> Optional[int]:
     for i, el in enumerate(seq):
@@ -565,10 +683,6 @@ def _index_of(seq: List[dict], pred) -> Optional[int]:
             return i
     return None
 
-
-# =========================
-# Defaults
-# =========================
 def _create_default_fertility_data() -> Dict[str, str]:
     return {
         "mo": "No encontrado",
