@@ -409,16 +409,39 @@ def _extract_chemical_params_by_layout(page: pdfplumber.page.Page) -> Tuple[List
 
     for param in expected_params:
         if "Conductividad eléctrica" in param:
+            # Mejorar extracción de conductividad eléctrica
             val_match = re.search(r"Conductividad eléctrica.*?\s([\d.,]+)", text, re.IGNORECASE)
             interp_match = re.search(
                 r"Conductividad eléctrica.*?[\d.,]+\s+([A-Za-zÁÉÍÓÚÜÑáéíóúü\s]+?)(?=\sM\.O|\sN\s|\sP\s|$)",
                 text, re.IGNORECASE)
+        elif "pH" in param:
+            # Mejorar extracción de pH con patrones más flexibles
+            if "agua suelo" in param:
+                val_match = re.search(r"pH.*?agua.*?suelo.*?\s([\d.,]+)", text, re.IGNORECASE)
+                interp_match = re.search(r"pH.*?agua.*?suelo.*?[\d.,]+\s+([A-Za-zÁÉÍÓÚÜÑáéíóúü\s]+?)(?=\s|$)", text, re.IGNORECASE)
+            elif "CaCl2" in param:
+                val_match = re.search(r"pH.*?CaCl2.*?\s([\d.,]+)", text, re.IGNORECASE)
+                interp_match = re.search(r"pH.*?CaCl2.*?[\d.,]+\s+([A-Za-zÁÉÍÓÚÜÑáéíóúü\s]+?)(?=\s|$)", text, re.IGNORECASE)
+            elif "KCl" in param:
+                val_match = re.search(r"pH.*?KCl.*?\s([\d.,]+)", text, re.IGNORECASE)
+                interp_match = re.search(r"pH.*?KCl.*?[\d.,]+\s+([A-Za-zÁÉÍÓÚÜÑáéíóúü\s]+?)(?=\s|$)", text, re.IGNORECASE)
+            else:
+                val_match = re.search(re.escape(param) + r"\s+([^\s]+)", text, re.IGNORECASE)
+                interp_match = re.search(re.escape(param) + r"\s+[^\s]+\s+(.+)", text, re.IGNORECASE)
         else:
             val_match = re.search(re.escape(param) + r"\s+([^\s]+)", text, re.IGNORECASE)
             interp_match = re.search(re.escape(param) + r"\s+[^\s]+\s+(.+)", text, re.IGNORECASE)
 
-        result_vals.append(val_match.group(1) if val_match else "No encontrado")
-        interp_vals.append(interp_match.group(1).strip() if interp_match else "No disponible")
+        # Limpiar valores extraídos
+        value = val_match.group(1).replace(',', '.') if val_match else "No encontrado"
+        interpretation = interp_match.group(1).strip() if interp_match else "No disponible"
+        
+        # Limpiar interpretación de caracteres extraños
+        interpretation = re.sub(r'[^\w\sáéíóúñÁÉÍÓÚÑ]', ' ', interpretation)
+        interpretation = re.sub(r'\s+', ' ', interpretation).strip()
+        
+        result_vals.append(value)
+        interp_vals.append(interpretation)
 
     return result_vals, interp_vals
 

@@ -181,65 +181,51 @@ def descargar_excel():
         
         logger.info(f"Generando Excel para {len(data)} registros")
         
+        # ORDENAR ALFABÉTICAMENTE POR NOMBRE DEL PRODUCTOR
+        data_sorted = sorted(data, key=lambda x: x.get('nombre_productor', '').upper())
+        
         # Crear libro de Excel de manera más eficiente
         workbook = Workbook()
         sheet = workbook.active
         sheet.title = "Analisis_Suelo_INIFAP"
         
-        # Mapeo de columnas optimizado
-        column_mapping = {
-            'nombre_productor': 'NOMBRE PRODUCTOR',
-            'municipio': 'MUNICIPIO',
-            'localidad': 'LOCALIDAD',
-            'cultivo_establecer': 'CULTIVO',
-            'meta_rendimiento': 'RENDIMIENTO (t/ha)',
-            'arcilla': 'ARCILLA (%)',
-            'limo': 'LIMO (%)',
-            'arena': 'ARENA (%)',
-            'textura': 'TEXTURA',
-            'densidad_aparente': 'DENSIDAD APARENTE',
-            'ph_agua': 'pH (H2O)',
-            'ph_cacl2': 'pH (CaCl2)',
-            'conductividad_electrica': 'CE (dS/m)',
-            'mo': 'M.O. (%)',
-            'fosforo': 'P (mg/kg)',
-            'nitrogeno': 'N (mg/kg)',
-            'potasio': 'K (mg/kg)',
-            'calcio': 'Ca (mg/kg)',
-            'magnesio': 'Mg (mg/kg)',
-            'sodio': 'Na (mg/kg)',
-            'azufre': 'S (mg/kg)',
-            'hierro': 'Fe (mg/kg)',
-            'cobre': 'Cu (mg/kg)',
-            'zinc': 'Zn (mg/kg)',
-            'manganeso': 'Mn (mg/kg)',
-            'boro': 'B (mg/kg)',
-            'rel_ca_mg': 'Ca/Mg',
-            'rel_mg_k': 'Mg/K',
-            'rel_ca_k': 'Ca/K',
-            'rel_ca_mg_k': '(Ca+Mg)/K',
-            'rel_k_mg': 'K/Mg'
-        }
-        
-        # Obtener solo las columnas que tienen datos
-        available_columns = []
-        if data and len(data) > 0:
-            first_record = data[0]
-            for key, header in column_mapping.items():
-                if key in first_record and first_record[key] not in ['No encontrado', '', None]:
-                    available_columns.append((key, header))
-        
-        if not available_columns:
-            # Si no hay columnas específicas, usar todas las básicas
-            basic_columns = [
-                ('nombre_productor', 'NOMBRE PRODUCTOR'),
-                ('municipio', 'MUNICIPIO'),
-                ('cultivo_establecer', 'CULTIVO'),
-                ('ph_agua', 'pH (H2O)'),
-                ('mo', 'M.O. (%)'),
-                ('fosforo', 'P (mg/kg)'),
-            ]
-            available_columns = basic_columns
+        # MAPEO DE COLUMNAS EN EL ORDEN CORRECTO (según tu ejemplo)
+        column_mapping = [
+            ('municipio', 'MUNICIPIO'),
+            ('localidad', 'LOCALIDAD'),
+            ('nombre_productor', 'NOMBRE DEL PRODUCTOR'),
+            ('cultivo_establecer', 'CULTIVO ANTERIOR'),
+            ('arcilla', 'ARCILLA'),
+            ('limo', 'LIMO'),
+            ('arena', 'ARENA'),
+            ('textura', 'TEXTURA'),
+            ('densidad_aparente', 'DA.'),
+            ('ph_agua', 'PH'),
+            ('mo', 'MO.'),
+            ('fosforo', 'FOSFORO'),
+            ('nitrogeno', 'N.INORGANICO'),
+            ('potasio', 'K'),
+            ('magnesio', 'MG'),
+            ('calcio', 'CA'),
+            ('sodio', 'NA'),
+            ('azufre', 'AL'),  # Nota: en tu ejemplo parece ser AL, ajustar según necesidad
+            ('conductividad_electrica', 'CIC'),
+            ('capacidad_campo', 'CIC CALCULADA'),  # Mapear según disponibilidad
+            ('punto_marchitez', 'H'),  # Mapear según disponibilidad
+            ('azufre', 'AZUFRE'),
+            ('hierro', 'HIERRO'),
+            ('cobre', 'COBRE'),
+            ('zinc', 'ZINC'),
+            ('manganeso', 'MANGANESO'),
+            ('boro', 'BORO'),
+            ('', 'Columna1'),  # Columnas vacías del ejemplo
+            ('', 'Columna2'),
+            ('rel_ca_mg', 'CA/MG'),
+            ('rel_mg_k', 'MG/K'),
+            ('rel_ca_k', 'CA/K'),
+            ('rel_ca_mg_k', '(CA₊MG)/K'),
+            ('rel_k_mg', 'K/MG')
+        ]
         
         # Estilos para el Excel
         header_font = Font(bold=True, color="FFFFFF")
@@ -253,22 +239,33 @@ def descargar_excel():
         center_alignment = Alignment(horizontal='center', vertical='center')
         
         # Escribir encabezados con estilo
-        for col_idx, (_, header) in enumerate(available_columns, 1):
+        for col_idx, (_, header) in enumerate(column_mapping, 1):
             cell = sheet.cell(row=1, column=col_idx, value=header)
             cell.font = header_font
             cell.fill = header_fill
             cell.border = border
             cell.alignment = center_alignment
         
-        # Escribir datos fila por fila para mejor eficiencia de memoria
-        for row_idx, record in enumerate(data, 2):
-            for col_idx, (key, _) in enumerate(available_columns, 1):
-                # Limpiar y formatear valor
-                raw_value = record.get(key, 'N/A')
-                if raw_value in ['No encontrado', 'No analizado', None, '']:
-                    value = 'N/A'
+        # Escribir datos fila por fila (USANDO DATA ORDENADA)
+        for row_idx, record in enumerate(data_sorted, 2):
+            for col_idx, (key, _) in enumerate(column_mapping, 1):
+                # Manejar columnas vacías
+                if key == '':
+                    value = ''
                 else:
-                    value = str(raw_value).strip()
+                    # Limpiar y formatear valor
+                    raw_value = record.get(key, 'N/A')
+                    if raw_value in ['No encontrado', 'No analizado', None, '']:
+                        value = 'N/A'
+                    else:
+                        value = str(raw_value).strip()
+                        # Limpiar valores numéricos
+                        if key in ['arcilla', 'limo', 'arena', 'ph_agua', 'mo', 'fosforo', 'nitrogeno', 'potasio', 'calcio', 'magnesio', 'sodio']:
+                            # Remover unidades y texto extra, mantener solo números
+                            import re
+                            numeric_match = re.search(r'([\d.,]+)', value)
+                            if numeric_match:
+                                value = numeric_match.group(1).replace(',', '.')
                 
                 cell = sheet.cell(row=row_idx, column=col_idx, value=value)
                 cell.border = border
@@ -278,13 +275,13 @@ def descargar_excel():
                     cell.fill = PatternFill(start_color="F2F2F2", end_color="F2F2F2", fill_type="solid")
         
         # Ajustar anchos de columna de manera más inteligente
-        for col_idx, (_, header) in enumerate(available_columns, 1):
+        for col_idx, (_, header) in enumerate(column_mapping, 1):
             # Calcular ancho basado en contenido
             max_length = len(header)
             
             # Muestrear algunas filas para calcular ancho (más eficiente)
-            sample_size = min(50, len(data))
-            for row_idx in range(2, min(2 + sample_size, len(data) + 2)):
+            sample_size = min(50, len(data_sorted))
+            for row_idx in range(2, min(2 + sample_size, len(data_sorted) + 2)):
                 cell_value = sheet.cell(row=row_idx, column=col_idx).value
                 if cell_value:
                     max_length = max(max_length, len(str(cell_value)))
@@ -312,7 +309,7 @@ def descargar_excel():
             output,
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             as_attachment=True,
-            download_name=f'analisis_suelo_INIFAP_{len(data)}_registros.xlsx'
+            download_name=f'analisis_suelo_INIFAP_{len(data_sorted)}_registros.xlsx'
         )
         
     except Exception as e:
